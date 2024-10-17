@@ -6,7 +6,8 @@ import requests_cache
 import pandas as pd
 from retry_requests import retry
 from transformers import pipeline
-import os
+import random
+
 
 ##call OpenMetro api and store in dataframe
 def call_api() -> pd.DataFrame:
@@ -45,10 +46,11 @@ def call_api() -> pd.DataFrame:
     
 
 
- ##get our data locally or call the api
+##get our data locally or call the api
 def get_data(from_local=False) -> pd.DataFrame:
     if from_local:
-        df = pd.read_csv("weather_data.csv")
+        cols = ['date','temperature_2m','relative_humidity_2m','apparent_temperature','rain']
+        df = pd.read_csv("forecasts/weather_data.csv", header='infer')
     else:
         df = call_api()
         save_data(df)
@@ -65,14 +67,7 @@ def transform_data(df: pd.DataFrame) -> pd.DataFrame:
 
 ##store our data in a csv
 def save_data(df: pd.DataFrame):
-    cols = ["date","temperature_2m","relative_humidity_2m","apparent_temperature","rain"]
-    
-    wd = os.path.dirname(__file__)
-    path = os.path.join(wd, "forecasts")
-    if not os.path.exists("forecasts"):
-        os.makedirs("forecasts")
-    path = os.path.join("forecasts", "weather_data.csv")
-    df.to_csv(path, mode='a', header=cols, index=False)
+    df.to_csv("forecasts/weather_data.csv", mode='w', index=False)
 
 ##make our report and save as pdf
 def generate_report(df: pd.DataFrame):
@@ -84,37 +79,40 @@ def generate_report(df: pd.DataFrame):
     plt.title("OpenMetro weather forecasts")
     plt.xlabel("Date")
     plt.ylabel("Temperature (Kelvin)")
+    plt.grid(True)
     plt.tight_layout(rect=[0, 0, 1, 1])
     ax1.xaxis.set_major_formatter(mdates.DateFormatter('%m-%d'))
 
-    fig.text(0.1, 0.4, call_face_hugger(),fontsize=9, ha='left')
+    fig.text(0.1, 0.375, call_face_hugger(round(df['temperature_2m'].mean(),2)),fontsize=9, ha='left')
 
     ax2 = fig.add_subplot(gs[2])
     ax2.plot(df.index, df['relative_humidity_2m'])
     plt.title("")
     plt.ylabel("Humidity")
+    plt.grid(True)
     plt.tight_layout(rect=[0, 0, 1, 1])
     ax2.xaxis.set_major_formatter(mdates.DateFormatter('%m-%d'))
 
     ##save our results
-    wd = os.path.dirname(__file__)
-    path = os.path.join(wd, "forecasts")
-    path = os.path.join("forecasts", "report.pdf")
-    plt.savefig(path)
+    plt.savefig("forecasts/report.pdf")
 
-def call_face_hugger() -> str:
-    input = "The weather forecasts for today is"
+def call_face_hugger(mean_temp : int) -> str:
+    input = ["The average temperature this week was + " + str(mean_temp) + " degrees kelvin",
+             str(mean_temp) + " degrees kelvin this week, ",
+             "For this weeks weather data we have a mean teperature of " + str(mean_temp) + "degrees kelvin"]
+    
     generator = pipeline('text-generation', model='gpt2')
-    response = generator(input, max_length=100)
+    response = generator(input[random.randint(0,len(input)-1)], max_new_tokens=125)
 
-    return parse_response(response)
+    return parse_response(response,len(input))
 
-def parse_response(response) -> str:
+def parse_response(response, input_length : int) -> str:
     output = ""
     counter = 0
     words = response[0]['generated_text'].split(" ")
+    #words = words[input_length:]
     for i in words:
-        output = output + " " + i
+        output = output + i + " "
         counter += len(i)
         if counter > 60:
             output += "\n"
@@ -122,7 +120,7 @@ def parse_response(response) -> str:
     return output
 
 
-df = get_data()
+df = get_data(True)
 df = transform_data(df)
 generate_report(df)
 
