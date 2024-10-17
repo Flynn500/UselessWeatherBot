@@ -6,6 +6,7 @@ import requests_cache
 import pandas as pd
 from retry_requests import retry
 from transformers import pipeline
+import os
 
 ##call OpenMetro api and store in dataframe
 def call_api() -> pd.DataFrame:
@@ -65,7 +66,13 @@ def transform_data(df: pd.DataFrame) -> pd.DataFrame:
 ##store our data in a csv
 def save_data(df: pd.DataFrame):
     cols = ["date","temperature_2m","relative_humidity_2m","apparent_temperature","rain"]
-    df.to_csv('weather_data.csv', mode='a', header=cols, index=False)
+    
+    wd = os.path.dirname(__file__)
+    path = os.path.join(wd, "forecasts")
+    if not os.path.exists("forecasts"):
+        os.makedirs("forecasts")
+    path = os.path.join("forecasts", "weather_data.csv")
+    df.to_csv(path, mode='a', header=cols, index=False)
 
 ##make our report and save as pdf
 def generate_report(df: pd.DataFrame):
@@ -89,12 +96,16 @@ def generate_report(df: pd.DataFrame):
     plt.tight_layout(rect=[0, 0, 1, 1])
     ax2.xaxis.set_major_formatter(mdates.DateFormatter('%m-%d'))
 
-    plt.savefig('temperature_plot.pdf')
+    ##save our results
+    wd = os.path.dirname(__file__)
+    path = os.path.join(wd, "forecasts")
+    path = os.path.join("forecasts", "report.pdf")
+    plt.savefig(path)
 
 def call_face_hugger() -> str:
     input = "The weather forecasts for today is"
     generator = pipeline('text-generation', model='gpt2')
-    response = generator(input, max_length=125)
+    response = generator(input, max_length=100)
 
     return parse_response(response)
 
@@ -103,7 +114,6 @@ def parse_response(response) -> str:
     counter = 0
     words = response[0]['generated_text'].split(" ")
     for i in words:
-        print(i)
         output = output + " " + i
         counter += len(i)
         if counter > 60:
@@ -112,8 +122,7 @@ def parse_response(response) -> str:
     return output
 
 
-print("a")
-df = get_data(True)
+df = get_data()
 df = transform_data(df)
 generate_report(df)
 
